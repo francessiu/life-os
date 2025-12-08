@@ -35,11 +35,11 @@ life-os/
 
 The objective of LifeOS is to create a centralised digital layer that integrates into the user's life, acting as a library, a personalised coach for productivity.
 
-* Digital Integration: Unify knowledge and workflow across all major platforms (Web, MacOS, iOS, Linux, Android).
+* **Digital Integration**: Unify knowledge and workflow across all major platforms (Web, MacOS, iOS, Linux, Android).
 
-* Personalised Intelligence: Prioritise user-specific data (PKM) over generalised pre-trained knowledge.
+* **Personalised Intelligence**: Prioritise user-specific data (PKM) over generalised pre-trained knowledge.
 
-* Behavioural Nudging: Implement a unique token economy and a Digital Butler or Pet character to encourage focus and prevent distraction.
+* **Behavioural Nudging**: Implement a unique token economy and a Digital Butler or Pet character to encourage focus and prevent distraction.
 
 ## Core Features
 

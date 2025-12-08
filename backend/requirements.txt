@@ -1,0 +1,19 @@
+fastapi
+fastapi-cors
+uvicorn
+python-dotenv
+
+# AI & LangChain
+langchain
+langchain-core
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+langchain-community
+langchain_chroma
+chromadb
+
+# Utilities
+pydantic
+python-multipart
+tiktoken
