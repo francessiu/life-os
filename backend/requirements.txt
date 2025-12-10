@@ -1,5 +1,8 @@
 fastapi
 fastapi-cors
+fastapi-users[sqlalchemy,oauth]
+httpx-oauth
+asyncpg
 uvicorn
 python-dotenv
 
@@ -17,3 +20,7 @@ chromadb
 pydantic
 python-multipart
 tiktoken
+
+# Automated Testing
+pytest
+httpx

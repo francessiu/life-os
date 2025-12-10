@@ -9,6 +9,9 @@ class Settings:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     PERSIST_DIRECTORY = os.getenv("PERSIST_DIRECTORY", "./backend/db/chroma_storage")
     
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+    MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID")
+    MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET")
+    
 settings = Settings()
-
-print(f"Loaded Anthropic Key: {os.getenv('ANTHROPIC_API_KEY')}")

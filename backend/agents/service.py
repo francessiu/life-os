@@ -1,6 +1,8 @@
 from langchain_core.prompts import PromptTemplate
 from backend.agents.llm_factory import LLMFactory
 from backend.pkm.rag_service import RAGService
+from functools import lru_cache
+import hashlib
 
 class AIAgent:
     def __init__(self):
@@ -47,15 +49,26 @@ class AIAgent:
             # If all else fails, raise an error
             raise ValueError("LLM response could not be parsed into a Python list.")
 
-    def query_with_context(self, query: str):
-        # 1. Retrieve relevant docs
-        context_docs = self.rag.search(query)
+    @lru_cache(maxsize=100)
+    def _get_cached_response(self, query_hash: str):
+        return None  # In real implementation, check Redis/Dict
+    
+    def query_with_context(self, query: str, user_id: int):
+        # 1. Create a hash of the query + user_id for caching
+        query_hash = hashlib.sha256(f"{user_id}:{query}".encode()).hexdigest()
+        
+        # 2. Check Cache (Simple in-memory for MVP)
+        if hasattr(self, "response_cache") and query_hash in self.response_cache:
+            return self.response_cache[query_hash]
+        
+        # 3. Retrieve relevant docs
+        context_docs = self.rag.search(query, user_id)
         context_text = "\n\n".join(context_docs)
         
         if not context_text:
             context_text = "No personal documents found on this topic."
 
-        # 2. Generate Answer
+        # 4. Generate Answer
         prompt = PromptTemplate.from_template(
             """
             Answer the user's question based ONLY on the context provided below.
@@ -71,4 +84,9 @@ class AIAgent:
         
         chain = prompt | self.llm
         response = chain.invoke({"context": context_text, "question": query})
+        
+        # 4. Save to Cache
+        if not hasattr(self, "response_cache"): self.response_cache = {}
+        self.response_cache[query_hash] = response.content
+        
         return response.content
