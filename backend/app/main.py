@@ -184,7 +184,13 @@ async def use_token(
         db.add(profile)
         await db.commit()
     
-    # Gamification Logic
+    # --- Gamification Logic ---
+    # Reset logic (if new week)
+    if datetime.utcnow() - profile.last_reset_date > timedelta(days=7):
+        profile.weekly_tokens = 3
+        profile.tokens_used = 0
+        profile.last_reset_date = datetime.utcnow()
+        
     if profile.weekly_tokens > 0:
         profile.weekly_tokens -= 1
         profile.tokens_used += 1
