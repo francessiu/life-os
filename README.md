@@ -6,8 +6,6 @@ LifeOS is a application designed to merge Personal Knowledge Management (PKM) wi
 
 ```text
 life-os/
-├── .github/                       # GitHub actions
-├── .vscode/                       # VSCode settings
 ├── backend/                       # Shared logic (Python)
 │   ├── app/                       # FastAPI application entry point
 │   ├── core/                      # Main business logic

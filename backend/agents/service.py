@@ -1,15 +1,23 @@
 from langchain_core.prompts import PromptTemplate
-from backend.agents.llm_factory import LLMFactory
-from backend.pkm.rag_service import RAGService
+from typing import List, Dict
+from langchain_core.documents import Document
+from langchain_community.tools import SerperDevTool
 from functools import lru_cache
 import hashlib
 import ast
 import re
 
+from backend.agents.llm_factory import LLMFactory
+from backend.pkm.rag_service import RAGService
+
+# Initialize the LLM Factory
+llm_factory = LLMFactory()
+    
 class AIAgent:
     def __init__(self):
         self.llm = LLMFactory.create_llm("openai")
         self.rag = RAGService()
+        self.web_search_tool = SerperDevTool() # TODO: Get SERPER_API_KEY and set it in environment
 
     def decompose_goal(self, goal_text: str):
         prompt = PromptTemplate.from_template(
@@ -53,7 +61,7 @@ class AIAgent:
 
     @lru_cache(maxsize=100)
     def _get_cached_response(self, query_hash: str):
-        return None  # In real implementation, check Redis/Dict
+        return None  # TODO: Check Redis/Dict in real implementation 
     
     def query_with_context(self, query: str, user_id: int):
         # 1. Create a hash of the query + user_id for caching

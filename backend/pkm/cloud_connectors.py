@@ -1,6 +1,6 @@
 from langchain_community.document_loaders import GoogleDriveLoader
 
-# Note: Requires Google Cloud credentials and user authorization to run.
+# TODO: Requires Google Cloud credentials and user authorization to run.
 
 class PKMConnector:
     @staticmethod
