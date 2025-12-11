@@ -5,6 +5,7 @@ httpx-oauth
 asyncpg
 uvicorn
 python-dotenv
+aiofiles
 
 # AI & LangChain
 langchain
@@ -23,4 +24,5 @@ tiktoken
 
 # Automated Testing
 pytest
+pytest-asyncio
 httpx

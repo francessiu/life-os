@@ -3,6 +3,8 @@ from backend.agents.llm_factory import LLMFactory
 from backend.pkm.rag_service import RAGService
 from functools import lru_cache
 import hashlib
+import ast
+import re
 
 class AIAgent:
     def __init__(self):
@@ -27,25 +29,25 @@ class AIAgent:
         # Safely extract and parse the list structure
         try:
             # Step 1: Clean up markdown code blocks if present
-            if content.startswith('```'):
-                content = content.split('\n', 1)[1].rsplit('\n', 1)[0]
+            if "```" in content:
+                content = content.split("```")[1]
+                # Remove optional language identifier (e.g., "python\n")
+                content = re.sub(r'^\w+\n', '', content.strip())
 
-            # Step 2: Use json.loads after replacing single quotes with double quotes
-            import json
-            # Replace single quotes (LLM often uses) with double quotes for JSON compliance
-            content = content.replace("'", '"')
+            # 2. Safe Evaluation (Converts string "['a', 'b']" to list ['a', 'b'])
+            steps = ast.literal_eval(content.strip())
+            
+            # Ensure it's actually a list
+            if isinstance(steps, list):
+                return steps
+            else:
+                return [content] # Fallback if LLM returned a single string
 
-            # Safely try to load as JSON list
-            return json.loads(content)
-
-        except (SyntaxError, json.JSONDecodeError):
-            # Fallback for unexpected formats
-            print(f"Error parsing LLM response: {content[:100]}...")
-            # Fallback to splitting by common list separators if parsing fails
-            if content.startswith('['):
-                content = content.strip('[]').split('", "') # Simple split for common cases
-                return [s.strip('"') for s in content if s]
-
+        except Exception as e:
+            print(f"Error parsing LLM response: {content} | Error: {e}")
+            # Fallback: Split by newlines if parsing fails
+            return [line.strip() for line in content.split('\n') if line.strip()]
+        
             # If all else fails, raise an error
             raise ValueError("LLM response could not be parsed into a Python list.")
 

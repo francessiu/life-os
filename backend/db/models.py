@@ -6,6 +6,8 @@ from typing import AsyncGenerator
 from fastapi import Depends
 from datetime import datetime
 
+from backend.db.session import get_async_session
+
 Base = declarative_base()
 
 # OAuth Account Table (Links User to Google/MS)
@@ -72,5 +74,5 @@ class GoalStep(Base):
     goal = relationship("Goal", back_populates="steps")
     
 # Helper for FastAPI Users to access the DB
-async def get_user_db(session: AsyncSession): # Depends on your DB session maker
+async def get_user_db(session: AsyncSession = Depends(get_async_session)): # Depends on your DB session maker
     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)

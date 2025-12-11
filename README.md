@@ -1,8 +1,8 @@
 # LifeOS: The Personal PKM and AI Agent
 
-LifeOS is a application designed to merge Personal Knowledge Management (PKM) with goal-oriented gamification, supported by a personalised AI agent. My goal is to shift the user's focus from mere knowledge, task management to more strategic behavioral plan.
+LifeOS is a application designed to merge Personal Knowledge Management (PKM) with goal-oriented gamification, supported by a personalised AI agent. The goal is to shift the user's focus from mere knowledge, task management to more strategic behavioral plan.
 
-Status: In Early Development
+**Status**: *In Early Development*
 
 ```text
 life-os/

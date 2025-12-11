@@ -3,7 +3,7 @@ from fastapi_users import FastAPIUsers
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -37,20 +37,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Authentication Route ---
+# --- Authentication Setup ---
 fastapi_users = FastAPIUsers[User, int](
     get_user_manager,
     [auth_backend],
 )
 
-# Google Login Routes
+current_active_user = fastapi_users.current_user(active=True)
+
+# --- Authentication Route ---
 app.include_router(
     fastapi_users.get_oauth_router(google_oauth_client, auth_backend, "SECRET"),
     prefix="/auth/google",
     tags=["auth"],
 )
 
-# Microsoft Login Route
 app.include_router(
     fastapi_users.get_oauth_router(microsoft_oauth_client, auth_backend, "SECRET"),
     prefix="/auth/microsoft",
@@ -62,7 +63,7 @@ app.include_router(
 def protected_route(user: User = Depends(fastapi_users.current_user())):
     return {"message": f"Hello {user.email}"}
 
-# --- Goals ---
+# --- Class ---
 class GoalRequest(BaseModel):
     title: str
     description: Optional[str] = None
@@ -80,12 +81,20 @@ class GoalResponse(BaseModel):
     description: Optional[str]
     steps: List[StepResponse] = []
 
-# --- Search / Chat ---
+class TokenResponse(BaseModel):
+    status: str
+    remaining: int
+
 class SearchRequest(BaseModel):
     query: str
     # Optional filters for the future feature
     limit: int = 3
     include_sources: bool = False
+
+# --- Routes ---
+@app.get("/")
+def read_root():
+    return {"status": "LifeOS Brain is running"}
 
 @app.post("/goals/decompose")
 def decompose_goal(goal: GoalRequest):
@@ -114,7 +123,7 @@ async def save_upload_file_tmp(upload_file: UploadFile) -> str:
 @app.post("/pkm/ingest")
 async def ingest_document(
     file: UploadFile = File(...), 
-    user: User = Depends(fastapi_users.current_user(active=True))
+    user: User = Depends(current_active_user)
 ):
     # 1. Save file to disk temporarily
     file_path = await save_upload_file_tmp(file)
@@ -163,15 +172,15 @@ async def ingest_document(
 @app.post("/pkm/chat")
 def chat_with_pkm(
     req: SearchRequest,
-    user: User = Depends(fastapi_users.current_user(active=True))
+    user: User = Depends(current_active_user)
 ):
     # Pass real user.id to the agent
     answer = agent.query_with_context(req.query, user_id=user.id)
     return {"answer": answer}
 
-@app.post("/agent/use-token")
+@app.post("/agent/use-token", response_model=TokenResponse)
 async def use_token(
-    user: User = Depends(fastapi_users.current_user(active=True)),
+    user: User = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session)
 ):
     # Fetch the profile asynchronously
@@ -183,13 +192,21 @@ async def use_token(
         profile = UserProfile(user_id=user.id)
         db.add(profile)
         await db.commit()
-    
+
+    if not profile.last_reset_date:
+        profile.last_reset_date = datetime.now(timezone.utc)
+        db.add(profile)
+        await db.commit()
+
     # --- Gamification Logic ---
     # Reset logic (if new week)
-    if datetime.utcnow() - profile.last_reset_date > timedelta(days=7):
+    time_since_reset = datetime.now(timezone.utc) - profile.last_reset_date
+    if time_since_reset.days >= 7:
         profile.weekly_tokens = 3
         profile.tokens_used = 0
-        profile.last_reset_date = datetime.utcnow()
+        profile.last_reset_date = datetime.now(timezone.utc)
+        db.add(profile) # Ensure we save the reset
+        await db.commit()
         
     if profile.weekly_tokens > 0:
         profile.weekly_tokens -= 1
