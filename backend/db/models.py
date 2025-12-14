@@ -1,5 +1,6 @@
+import enum
 from fastapi_users.db import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Text, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Text, DateTime, JSON, Enum
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
@@ -7,6 +8,7 @@ from fastapi import Depends
 from datetime import datetime
 
 from backend.db.session import get_async_session
+from backend.db.session import Base
 
 Base = declarative_base()
 
@@ -39,39 +41,71 @@ class User(SQLAlchemyBaseUserTable[int], Base):
     goals = relationship("Goal", back_populates="user")
     
 class UserProfile(Base):
-    """
-    Separates 'Game Data' (Tokens, Streaks) from 'Identity Data'.
-    """
     __tablename__ = "user_profiles"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.id"), unique=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), unique=True)
     
-    # Token Economy
+    # Gamification
     weekly_tokens = Column(Integer, default=3)
     tokens_used = Column(Integer, default=0)
     last_reset_date = Column(DateTime, default=datetime.utcnow)
 
+    # Personalisation & Memory
+    agent_preferences = Column(JSON, default={}) 
+    
+    # Feedback History
+    # Stores: [{"query": "...", "timestamp": "..."}]
+    interaction_history = Column(JSON, default=[])
+
     user = relationship("User", back_populates="profile")
 
+class GoalStatus(str, enum.Enum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    FAILED = "failed" # Used when tokens run out
+    ARCHIVED = "archived"
+    
 class Goal(Base):
     __tablename__ = "goals"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)
-    description = Column(Text, nullable=True)
-    is_completed = Column(Boolean, default=False)
+    id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("user.id"))
+    title = Column(String)
+    status = Column(Enum(GoalStatus), default=GoalStatus.ACTIVE)
+    deadline = Column(DateTime, nullable=True)
+    days_per_week = Column(Integer, default=5)
     
+    # Hierarchy: Goal -> SubGoals
+    subgoals = relationship("SubGoal", back_populates="goal", cascade="all, delete-orphan")
     user = relationship("User", back_populates="goals")
-    steps = relationship("GoalStep", back_populates="goal")
+    
+class SubGoal(Base):
+    """ Represents a Milestone or a Weekly Focus. """
+    __tablename__ = "subgoals"
+    id = Column(Integer, primary_key=True)
+    goal_id = Column(Integer, ForeignKey("goals.id"))
+    title = Column(String)
+    is_completed = Column(Boolean, default=False)
+    
+    # Hierarchy: SubGoal -> Tasks
+    tasks = relationship("GoalTask", back_populates="subgoal", cascade="all, delete-orphan")
+    goal = relationship("Goal", back_populates="subgoals")
 
-class GoalStep(Base):
-    __tablename__ = "goal_steps"
-    id = Column(Integer, primary_key=True, index=True)
+class GoalTask(Base):
+    """
+    The atomic unit. Completing these earns/preserves tokens.
+    """
+    __tablename__ = "goal_tasks"
+    id = Column(Integer, primary_key=True)
+    subgoal_id = Column(Integer, ForeignKey("subgoals.id"))
+    
     description = Column(String)
     is_completed = Column(Boolean, default=False)
-    goal_id = Column(Integer, ForeignKey("goals.id"))
     
-    goal = relationship("Goal", back_populates="steps")
+    # AI Metadata for Smart Restarts
+    difficulty = Column(Integer, default=1) # 1-5, estimated by AI
+    was_failed_previously = Column(Boolean, default=False) 
+
+    subgoal = relationship("SubGoal", back_populates="tasks")
     
 # Helper for FastAPI Users to access the DB
 async def get_user_db(session: AsyncSession = Depends(get_async_session)): # Depends on your DB session maker

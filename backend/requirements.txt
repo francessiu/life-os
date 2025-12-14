@@ -1,3 +1,7 @@
+# Utilities
+pydantic
+python-multipart
+tiktoken
 fastapi
 fastapi-cors
 fastapi-users[sqlalchemy,oauth]
@@ -6,6 +10,9 @@ asyncpg
 uvicorn
 python-dotenv
 aiofiles
+pyjwt[crypto]
+cryptography
+apscheduler
 
 # AI & LangChain
 langchain
@@ -16,11 +23,7 @@ langchain-google-genai
 langchain-community
 langchain_chroma
 chromadb
-
-# Utilities
-pydantic
-python-multipart
-tiktoken
+tavily-python
 
 # Automated Testing
 pytest

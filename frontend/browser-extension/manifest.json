@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "LifeOS Companion",
+  "version": "1.0",
+  "permissions": [
+    "storage", 
+    "tabs",
+    "declarativeNetRequest" 
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "*://*.twitter.com/*",
+    "*://*.youtube.com/*",
+    "*://*.instagram.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["butler.css"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

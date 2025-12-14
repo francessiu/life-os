@@ -10,8 +10,9 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         print(f"User {user.id} has registered.")
-        # Optional: Auto-create a UserProfile here if not using Database Triggers
-        # But usually, it's safer to create it on first login or via a DB trigger.
+
+    async def on_after_login(self, user: User, request: Optional[Request] = None):
+        print(f"User {user.id} logged in.")
 
 async def get_user_manager(user_db=Depends(get_user_db)):
     yield UserManager(user_db)

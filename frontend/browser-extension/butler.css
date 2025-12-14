@@ -1,0 +1,13 @@
+#lifeos-butler-overlay {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999; /* Always on top */
+  cursor: grab;
+  font-size: 40px;
+  filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.2));
+  transition: transform 0.2s;
+}
+#lifeos-butler-overlay:hover {
+  transform: scale(1.1);
+}
