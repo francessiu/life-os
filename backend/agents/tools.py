@@ -7,7 +7,6 @@ class AgentTools:
     def get_web_search_tool():
         """
         Returns a configured Web Search tool (Tavily).
-        TODO: Requires TAVILY_API_KEY in .env
         """
         # Use Tavily for RAG fallbacks
         search = TavilySearchResults(max_results=10)

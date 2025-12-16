@@ -187,7 +187,7 @@ class AIAgent:
         response = chain.invoke({
             "context": context_text,
             "question": query,
-            "source_label": source_label # Passing the label here
+            "source_label": source_label
         })
         
         return response

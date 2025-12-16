@@ -1,54 +1,71 @@
 import Foundation
 
+protocol FolderWatcherDelegate: AnyObject {
+    func folderWatcher(_ watcher: FolderWatcher, didDetectChangesIn files: [URL])
+}
+
 class FolderWatcher {
-    private var fileDescriptor: CInt = -1
+    private var dirFD: CInt = -1
     private var source: DispatchSourceFileSystemObject?
+    private let queue = DispatchQueue(label: "com.lifeos.folderwatcher", attributes: .concurrent)
+    
     let folderURL: URL
+    weak var delegate: FolderWatcherDelegate?
     
     init(url: URL) {
         self.folderURL = url
     }
-    
-    func startMonitoring() {
-        // 1. Open the folder
-        fileDescriptor = open(folderURL.path, O_EVTONLY)
-        if fileDescriptor == -1 { return }
+
+    func start() {
+        // 1. Open Directory File Descriptor
+        dirFD = open(folderURL.path, O_EVTONLY)
+        if dirFD == -1 {
+            print("❌ Failed to open folder: \(folderURL.path)")
+            return
+        }
         
         // 2. Create Dispatch Source
         source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fileDescriptor,
-            eventMask: .write, // Monitor for changes/writes
-            queue: DispatchQueue.global()
+            fileDescriptor: dirFD,
+            eventMask: .write, // Listen for content changes
+            queue: queue
         )
         
         // 3. Define Event Handler
         source?.setEventHandler { [weak self] in
-            print("iCloud Folder Changed!")
-            self?.handleFileChange()
+            self?.scanForChanges()
+        }
+        
+        source?.setCancelHandler { [weak self] in
+            guard let self = self else { return }
+            close(self.dirFD)
         }
         
         source?.resume()
-        print("Started watching: \(folderURL.path)")
+        print("👀 Watching: \(folderURL.path)")
     }
-    
-    private func handleFileChange() {
+
+    func stop() {
+        source?.cancel()
+    }
+
+    private func scanForChanges() {
         // Logic: Scan folder for recently modified files and upload them
-        // Real implementation requires checking 'modificationDate'.
         do {
             let fileURLs = try FileManager.default.contentsOfDirectory(
-                at: folderURL, 
+                at: folderURL,
                 includingPropertiesForKeys: [.contentModificationDateKey]
             )
             
-            for fileURL in fileURLs {
-                // Ignore hidden files
-                if fileURL.lastPathComponent.hasPrefix(".") { continue }
-                
-                // Upload this file to backend
-                uploadFile(fileURL)
+            // In a real app, you compare 'modificationDate' against a saved timestamp
+            // For now, we send all visible files
+            let visibleFiles = fileURLs.filter { !$0.lastPathComponent.hasPrefix(".") }
+            
+            DispatchQueue.main.async {
+                self.delegate?.folderWatcher(self, didDetectChangesIn: visibleFiles)
             }
         } catch {
-            print("Error scanning folder: \(error)")
+            print("Scan error: \(error)")
         }
     }
     

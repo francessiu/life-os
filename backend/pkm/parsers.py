@@ -4,42 +4,50 @@ from pypdf import PdfReader
 from docx import Document as DocxDocument
 from fastapi import UploadFile
 
-async def extract_text_from_upload(file: UploadFile) -> Optional[str]:
+def parse_file_bytes(content: bytes, filename: str) -> Optional[str]:
     """
-    Detects file type and extracts text content.
+    Core Logic: Extracts text from raw bytes based on extension.
+    Used by both API Uploads and Cloud Sync.
     """
-    content = await file.read()
-    file_ext = file.filename.split('.')[-1].lower()
-    
+    file_ext = filename.split('.')[-1].lower()
     text = ""
-
+    
     try:
         if file_ext == "pdf":
-            # Process PDF
             pdf_file = io.BytesIO(content)
             reader = PdfReader(pdf_file)
             for page in reader.pages:
-                text += page.extract_text() + "\n"
-
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+                    
         elif file_ext in ["docx", "doc"]:
-            # Process Word Doc
             docx_file = io.BytesIO(content)
             doc = DocxDocument(docx_file)
             for para in doc.paragraphs:
                 text += para.text + "\n"
-
-        elif file_ext in ["txt", "md", "csv"]:
-            # Process Plain Text
-            text = content.decode("utf-8")
-            
+                
+        elif file_ext in ["txt", "md", "csv", "json"]:
+            # Try utf-8, fallback to latin-1 for legacy files
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                text = content.decode("latin-1")
+                
         else:
-            return None # Unsupported type
+            # print(f"Unsupported file type: {file_ext}")
+            return None 
 
     except Exception as e:
-        print(f"Error parsing {file.filename}: {e}")
+        print(f"Error parsing {filename}: {e}")
         return None
-        
-    # Reset cursor for safety if needed elsewhere
-    await file.seek(0)
-    
+
     return text.strip()
+
+async def extract_text_from_upload(file: UploadFile) -> Optional[str]:
+    """
+    Wrapper for FastAPI UploadFile objects (Local Uploads).
+    """
+    content = await file.read()
+    await file.seek(0) # Reset cursor for safety
+    return parse_file_bytes(content, file.filename)

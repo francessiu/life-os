@@ -1,9 +1,13 @@
 import Cocoa
 import SwiftUI
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, FolderWatcherDelegate {
     var characterController: CharacterController?
-    var statusItem: NSStatusItem? // Menu Bar Icon
+    var statusItem: NSStatusItem?
+    var iCloudWatcher: FolderWatcher?
+
+    // Hardcoded for demo. In production, fetch from Keychain after login.
+    let userToken = "YOUR_JWT_TOKEN_HERE"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Initialize Controller
@@ -31,6 +35,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 4. Start Polling Backend for Emotion State
         startPollingBackend()
+
+        // 5. Start watching file changes 
+        setupiCloudWatch()
     }
     
     func startPollingBackend() {
@@ -59,6 +66,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         task.resume()
+    }
+
+    func setupiCloudWatch() {
+        // Use Apple's API to find the ubiquity (iCloud) container
+        // Note: MUST enable "iCloud" capability in Xcode for this to work.
+        // Pass 'nil' to get the default container.
+        guard let iCloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents") else {
+            print("⚠️ iCloud Drive not enabled or accessible.")
+            return
+        }
+        
+        iCloudWatcher = FolderWatcher(url: iCloudURL)
+        iCloudWatcher?.delegate = self
+        iCloudWatcher?.start()
+    }
+    
+    // Delegate Method
+    func folderWatcher(_ watcher: FolderWatcher, didDetectChangesIn files: [URL]) {
+        print("📂 Detected \(files.count) files in iCloud. Syncing...")
+        
+        for file in files {
+            // Upload every file found (Optimised: Check modification date in production)
+            NetworkManager.shared.uploadFile(fileURL: file, authToken: userToken)
+        }
     }
 }
 

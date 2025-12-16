@@ -16,11 +16,18 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
-    # OAuth Credentials
+    # AI & Search Keys
+    OPENAI_API_KEY: str
+    ANTHROPIC_API_KEY: str
+    GOOGLE_API_KEY: str
+    TAVILY_API_KEY: str
+    
+    # Google OAuth Credentials
     GOOGLE_CLIENT_ID: str 
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
     
+    # Microsoft OAuth Credentials
     MICROSOFT_CLIENT_ID: str
     MICROSOFT_CLIENT_SECRET: str
     MICROSOFT_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
@@ -36,5 +43,6 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()
