@@ -28,13 +28,17 @@ class AgentOrchestrator:
         Your job is to select the best specialised AI Agent for a given user query.
         
         AVAILABLE AGENTS:
-        - productivity: For planning tasks, goals, schedules, and any productivity-related prompts.
-        - academic: For research, complex concepts, writing analysis, and citing sources.
+        - academic: For research, complex concepts, and citing sources.
+        - coder: For writing software.
+        - analyst: For writing analysis.
+        - research: For complex questions requiring deep investigation, gathering data from multiple sources, or creating comprehensive reports. (e.g. "Research the history of...", "Compare X and Y in depth").
         - casual: For chatting, emotional support, life advice, and fun.
+        - creative: For developing idea, brainstorming, and creativity.
         
         INSTRUCTIONS:
-        1. Analyze the USER QUERY.
-        2. Select the single best match from the list: {self.available_modes}.
+        1. Analyze the USER QUERY complexity.
+        2. If it requires NEW information from the web to be comprehensive -> Select 'research'.
+        3. Otherwise select the single best match from the list: {self.available_modes}.
         3. If unsure, default to 'productivity'.
         4. Return ONLY the key string (e.g., "academic"). Do not add punctuation.
         """

@@ -111,3 +111,9 @@ class FeedbackCreate(BaseModel):
 class UserProfileResponse(BaseModel):
     weekly_tokens: int
     agent_preferences: Dict[str, Any]
+
+class ResearchPlan(BaseModel):
+    """Structured output from the Planner step."""
+    explanation: str = Field(description="Brief explanation of the research strategy.")
+    search_queries: List[str] = Field(description="List of 5-10 specific search queries to execute.")
+    required_concepts: List[str] = Field(description="Key concepts or terms to look for.")

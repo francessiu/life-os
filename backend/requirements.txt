@@ -13,6 +13,7 @@ aiofiles
 pyjwt[crypto]
 cryptography
 apscheduler
+firecrawl-py
 
 # AI & LangChain
 langchain

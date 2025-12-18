@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str
     GOOGLE_API_KEY: str
     TAVILY_API_KEY: str
+    FIRECRAWL_API_KEY: str
     
     # Google OAuth Credentials
     GOOGLE_CLIENT_ID: str 

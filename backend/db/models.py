@@ -106,6 +106,32 @@ class GoalTask(Base):
     was_failed_previously = Column(Boolean, default=False) 
 
     subgoal = relationship("SubGoal", back_populates="tasks")
+
+class SourceScope(str, enum.Enum):
+    PRIVATE = "private" # Visible only to the owner
+    GLOBAL = "global"   # Visible to all users (Shared Database)
+
+class KnowledgeSource(Base):
+    __tablename__ = "knowledge_sources"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True) # Null if created by System Admin
+    
+    # Target Info
+    url = Column(String, index=True, nullable=False)
+    title = Column(String, nullable=True)
+    scope = Column(Enum(SourceScope), default=SourceScope.PRIVATE)
+    
+    # Watcher Config
+    is_active = Column(Boolean, default=True)
+    update_frequency_hours = Column(Integer, default=24) # How often to re-crawl
+    last_crawled_at = Column(DateTime, nullable=True)
+    
+    # Status
+    error_count = Column(Integer, default=0)
+    last_error = Column(String, nullable=True)
+
+    user = relationship("User", back_populates="sources")
     
 # Helper for FastAPI Users to access the DB
 async def get_user_db(session: AsyncSession = Depends(get_async_session)): # Depends on your DB session maker

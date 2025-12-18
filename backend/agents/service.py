@@ -14,6 +14,7 @@ from backend.agents.tools import AgentTools
 from backend.pkm.rag_service import RAGService
 from backend.agents.presets import AGENT_MODES
 from backend.agents.orchestrator import AgentOrchestrator
+from backend.agents.research_agent import ResearchAgent
 
 class AIAgent:
     def __init__(self):
@@ -22,6 +23,7 @@ class AIAgent:
         self.rag = RAGService()
         self.web_search_tool = AgentTools.get_web_search_tool()
         self.code_tool = AgentTools.get_code_interpreter_tool()
+        self.research_agent = ResearchAgent()
     
     def _parse_llm_json(self, content: str) -> List[Dict]:
         """
@@ -153,6 +155,10 @@ class AIAgent:
             print(f"🤖 Routing query: '{query}'...")
             selected_mode = await self.orchestrator.route_query(query)
             print(f" ↳ Routed to: {selected_mode.upper()} Agent")     
+
+        if selected_mode == "research":
+            # Hand off completely to the Research Agent
+            return await self.research_agent.run_deep_research(query, user_id)
         
         base_config = AGENT_MODES.get(selected_mode, AGENT_MODES["productivity"])
         final_config = base_config.copy(deep=True)

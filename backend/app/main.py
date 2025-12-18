@@ -7,16 +7,13 @@ from backend.api import preferences
 from backend.core.config import settings
 from backend.db.session import engine
 from backend.db.models import Base
-
-# Auth Imports
 from backend.auth.users import fastapi_users
 from backend.auth.backend import auth_backend
 from backend.auth.oauth import google_oauth_client, microsoft_oauth_client, apple_oauth_client
 from backend.auth.schemas import UserRead, UserCreate, UserUpdate
 from backend.services.sync_service import sync_all_users
-
-# API Router Imports
 from backend.api import pkm, gamification
+from backend.services.watcher_service import run_watcher_cycle
 
 # Lifecycle: Ensure DB tables exist on startup
 @asynccontextmanager
@@ -113,5 +110,9 @@ def read_root():
 
 @app.on_event("startup")
 async def start_scheduler():
+    # Cloud Sync (Google Drive/OneDrive/iCloud)
     scheduler.add_job(sync_all_users, 'interval', hours=1)
+    
+    # Web Watcher (Crawling)
+    scheduler.add_job(run_watcher_cycle, 'interval', hours=1)
     scheduler.start()

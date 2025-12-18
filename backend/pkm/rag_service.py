@@ -1,88 +1,127 @@
 import os
+import weaviate
+import hashlib
+from typing import List, Dict, Any
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
 from langchain_core.documents import Document
+from langchain_weaviate.vectorstores import WeaviateVectorStore
 
 from backend.core.config import settings
 
 class RAGService:
     def __init__(self):
+        # 1. Initialize Embeddings
         if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is missing in settings.")
+            raise ValueError("OPENAI_API_KEY is missing.")
+        self.embeddings = OpenAIEmbeddings(api_key=settings.OPENAI_API_KEY)
         
-        # OpenAI embeddings for high-quality search
-        self.embedding_function = OpenAIEmbeddings(api_key=settings.OPENAI_API_KEY)
-        self.persist_dir = settings.PERSIST_DIRECTORY
-        
-    def _get_user_db(self, user_id: int):
-        """
-        Initializes/loads the Chroma DB instance scoped to a specific user.
-        Structure: ./backend/db/chroma_storage/user_1/
-        """
-        user_db_path = os.path.join(self.persist_dir, f"user_{user_id}")
-        os.makedirs(user_db_path, exist_ok=True)
-        
-        return Chroma(
-            persist_directory=user_db_path,
-            embedding_function=self.embedding_function,
-            collection_name=f"user_{user_id}_collection"
+        # 2. Connect to Weaviate (Production Vector DB)
+        auth_config = None
+        if settings.WEAVIATE_API_KEY:
+            auth_config = weaviate.AuthApiKey(api_key=settings.WEAVIATE_API_KEY)
+
+        self.client = weaviate.Client(
+            url=settings.WEAVIATE_URL,
+            auth_client_secret=auth_config,
+            additional_headers={"X-OpenAI-Api-Key": settings.OPENAI_API_KEY}
         )
-
-    def ingest_text(self, text: str, source: str, user_id: int):
-        """
-        Takes raw text (from PDF/Web), chunks it, and saves to Vector DB for a specific user.
-        """
-        user_db = self._get_user_db(user_id)
         
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-
-        metadata = {"source": source, "user_id": user_id}
-        chunks = text_splitter.create_documents([text], metadatas=[metadata])
-        
-        user_db.add_documents(chunks)
-        user_db.persist()
-        return len(chunks)
+        self.index_name = "KnowledgeObject"
+        self._ensure_schema()
     
-    def search(self, query: str, user_id: int, k: int = 4):
-        """
-        Implements HYBRID SEARCH (Vector + Keyword).
-        """
-        user_db = self._get_user_db(user_id)
-        
-        # 1. Vector Retriever (Semantic)
-        vector_retriever = user_db.as_retriever(search_kwargs={"k": k})
-        
-        # 2. Keyword Retriever (BM25)
-        # Note: BM25 needs all docs in memory to build index. 
-        # For production with millions of docs, use Weaviate/Pinecone which has Hybrid built-in.
-        # For a local MVP, fetch typical docs or maintain a separate index.
-        # Here is a simplified pattern:
-        
-        # Get all docs (Warning: Expensive for large DBs)
-        # In a real app, persist the BM25 index separately.
-        all_docs = user_db.get()['documents'] 
-        all_metadatas = user_db.get()['metadatas']
-        doc_objects = [Document(page_content=t, metadata=m) for t, m in zip(all_docs, all_metadatas)]
-        
-        if not doc_objects:
-            return []
+    def _ensure_schema(self):
+        """Ensures the Weaviate class exists with correct properties."""
+        if not self.client.schema.exists(self.index_name):
+            class_obj = {
+                "class": self.index_name,
+                "vectorizer": "text2vec-openai", # Or 'none' if we push vectors manually
+                "properties": [
+                    {"name": "content", "dataType": ["text"]},
+                    {"name": "source", "dataType": ["text"]},
+                    {"name": "user_id", "dataType": ["int"]}, # 0 = Global
+                    {"name": "scope", "dataType": ["text"]},  # 'private' vs 'global'
+                    {"name": "content_hash", "dataType": ["text"]} # For deduplication
+                ]
+            }
+            self.client.schema.create_class(class_obj)
 
-        bm25_retriever = BM25Retriever.from_documents(doc_objects)
-        bm25_retriever.k = k
+    def ingest_text(self, text: str, source: str, user_id: int, metadata: Dict[str, Any] = None) -> int:
+        """Chunks, hashes, and ingests text. Skips duplicates."""
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        chunks = text_splitter.split_text(text)
+        
+        count = 0
+        with self.client.batch as batch:
+            batch.batch_size = 100
+            for chunk in chunks:
+                # 1. Deduplication Check
+                content_hash = hashlib.md5(chunk.encode('utf-8')).hexdigest()
+                
+                # Check if this specific chunk already exists for this scope
+                exists = self.client.query.get(self.index_name, ["content_hash"]) \
+                    .with_where({
+                        "operator": "And",
+                        "operands": [
+                            {"path": ["content_hash"], "operator": "Equal", "valueText": content_hash},
+                            {"path": ["user_id"], "operator": "Equal", "valueInt": user_id}
+                        ]
+                    }).with_limit(1).do()
+                
+                if exists['data']['Get'][self.index_name]:
+                    continue # Skip duplicate
 
-        # 3. Ensemble (Combine Results)
-        # Weights: 0.5 Vector, 0.5 Keyword
-        ensemble_retriever = EnsembleRetriever(
-            retrievers=[vector_retriever, bm25_retriever],
-            weights=[0.5, 0.5]
+                # 2. Prepare Metadata
+                props = {
+                    "content": chunk,
+                    "source": source,
+                    "user_id": user_id,
+                    "scope": "global" if user_id == 0 else "private",
+                    "content_hash": content_hash,
+                }
+                if metadata:
+                    props.update(metadata)
+
+                # 3. Add to Batch
+                # LangChain wrapper is good, but direct client gives more control over properties
+                batch.add_data_object(props, self.index_name)
+                count += 1
+                
+        return count
+    
+    def search(self, query: str, user_id: int, k: int = 5):
+        """Performs Hybrid Search across Private (User) and Global (Shared) scopes."""
+        # Weaviate Hybrid Search: Alpha 0.5 = Balance Keyword (BM25) and Vector
+        response = (
+            self.client.query
+            .get(self.index_name, ["content", "source", "scope", "user_id"])
+            .with_hybrid(query=query, alpha=0.5)
+            .with_where({
+                "operator": "Or",
+                "operands": [
+                    {"path": ["user_id"], "operator": "Equal", "valueInt": user_id}, # Private
+                    {"path": ["user_id"], "operator": "Equal", "valueInt": 0}        # Global
+                ]
+            })
+            .with_limit(k)
+            .with_additional(["score", "distance"])
+            .do()
         )
         
-        results = ensemble_retriever.invoke(query)
+        results = []
+        if 'data' in response and 'Get' in response['data']:
+            items = response['data']['Get'][self.index_name]
+            for item in items:
+                results.append({
+                    "content": item['content'],
+                    "metadata": {"source": item['source'], "user_id": item['user_id']},
+                    "scope": item['scope'],
+                    "score": item['_additional']['score']
+                })
         
-        # Standardise Output with Scores (Ensemble doesn't always give raw scores easily, so normalise)
-        return [{"content": doc.page_content, "metadata": doc.metadata, "score": 0.9} for doc in results]
+        return results
     
 rag_service = RAGService()
