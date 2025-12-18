@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, Literal, List, Dict, Any
 from datetime import date, datetime
 
 from backend.db.models import GoalStatus
@@ -60,15 +60,36 @@ class GoalResponse(BaseModel):
 class TokenResponse(BaseModel):
     status: str
     remaining: int
-
-# --- PKM ---
-class SearchRequest(BaseModel):
+    
+# --- Chat & Agent Schemas ---
+class ChatRequest(BaseModel):
+    """The unified request object for the Chat Endpoint."""
     query: str
-    limit: int = 3
-    include_sources: bool = False
+    
+    # Mode Selection (e.g., "productivity", "academic", "casual", or "auto")
+    mode: Optional[str] = "auto" 
+    
+    # Model Switching (Overrides user defaults if provided)
+    # Examples: provider="openai", model="gpt-4o"
+    model_provider: Optional[Literal["openai", "google", "anthropic"]] = None
+    model_name: Optional[str] = None 
+    
+    # Optional: For debugging or specific constraints
+    include_sources: bool = True
+
+class AgentConfig(BaseModel):
+    """Defines the configuration for a specific Agent personality."""
+    name: str
+    system_prompt: str
+    
+    # Brain Configuration
+    provider: Literal["openai", "google", "anthropic"] = "openai"
+    model: str = "gpt-4o"
+    temperature: float = 0.7
+    
+    refinement_level: Optional[str] = None
     
 # --- Personalisation ---
-
 class UserPreferencesUpdate(BaseModel):
     """
     User defines how they want the agent to behave.

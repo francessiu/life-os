@@ -13,13 +13,16 @@ from backend.agents.llm_factory import LLMFactory
 from backend.agents.tools import AgentTools
 from backend.pkm.rag_service import RAGService
 from backend.agents.presets import AGENT_MODES
+from backend.agents.orchestrator import AgentOrchestrator
 
 class AIAgent:
     def __init__(self):
         self.llm_factory = LLMFactory()
+        self.orchestrator = AgentOrchestrator()
         self.rag = RAGService()
-        self.web_search_tool = SerperDevTool() # TODO: Get SERPER_API_KEY and set it in environment
-
+        self.web_search_tool = AgentTools.get_web_search_tool()
+        self.code_tool = AgentTools.get_code_interpreter_tool()
+    
     def _parse_llm_json(self, content: str) -> List[Dict]:
         """
         Helper to parse JSON responses from LLMs.
@@ -136,25 +139,34 @@ class AIAgent:
         
         return top_score < threshold
     
-    async def query_with_context(self, query: str, user_id: int, mode: str = "productivity", overrides: dict = None) -> str:
-        # --- Load Base Config from Presets ---
-        # This gets the default model/prompt for "productivity", "academic", etc.
-        base_config = AGENT_MODES.get(mode, AGENT_MODES["productivity"])
-        final_config = base_config.copy()
+    async def query_with_context(
+        self, 
+        query: str, 
+        user_id: int, 
+        mode: str = "auto", # "auto" triggers router
+        overrides: dict = None,
+        db: AsyncSession = None
+    ) -> str:
+        # --- Load Configuration (Using the routed mode) ---
+        selected_mode = mode
+        if mode == "auto":
+            print(f"🤖 Routing query: '{query}'...")
+            selected_mode = await self.orchestrator.route_query(query)
+            print(f" ↳ Routed to: {selected_mode.upper()} Agent")     
+        
+        base_config = AGENT_MODES.get(selected_mode, AGENT_MODES["productivity"])
+        final_config = base_config.copy(deep=True)
         
         # --- Apply User Overrides ---         
         if overrides:
-            if overrides.get("tone"):
-                # Append tone instruction to system prompt
-                final_config.system_prompt += f" Adopt a {overrides['tone']} tone."
-            if overrides.get("refinement_level"):
-                final_config.refinement_level = overrides["refinement_level"]
+            if overrides.get("provider"): final_config.provider = overrides["provider"]
+            if overrides.get("model"): final_config.model = overrides["model"]
+            if overrides.get("tone"): final_config.system_prompt += f" Adopt a {overrides['tone']} tone."
+            if overrides.get("refinement_level"): final_config.refinement_level = overrides["refinement_level"]
         
         # --- Retrieve Documents ---
-        # (Sync or Async depending on Vector DB driver)
-        # Assuming rag.search is blocking, run in thread pool if needed, 
-        # but Chroma is usually fast enough for MVP.
-        rag_results = self.rag.search(query, user_id=user_id, k=4)
+        # Using to_thread for blocking chroma call
+        rag_results = await asyncio.to_thread(self.rag.search, query, user_id=user_id, k=4)
         
         source_label = "Local Knowledge Base"
         context_text = ""
@@ -165,11 +177,11 @@ class AIAgent:
         else:
             print(f"⚠️ Low relevance. Triggering Web Search...")
             try:
-                # Use arun (Async) if available, otherwise wrap run
+                # Use arun (Async) if available
                 if hasattr(self.web_search_tool, 'arun'):
                     web_results = await self.web_search_tool.arun(query)
                 else:
-                    web_results = self.web_search_tool.run(query)
+                    web_results = await asyncio.to_thread(self.web_search_tool.run, query)
                 
                 # Combine whatever weak local context we have + Web Results
                 local_text = "\n".join([doc['content'] for doc in rag_results])
@@ -181,14 +193,31 @@ class AIAgent:
                 print(f"Web search failed: {e}")
                 context_text = "No relevant context found."
 
-        # --- Generate answer using the specific agent profile ---
-        chain = self.llm_factory.get_agent_chain(final_config)
-        
-        response = chain.invoke({
-            "context": context_text,
-            "question": query,
-            "source_label": source_label
-        })
-        
-        return response
+        # --- Generate answer using the specific agent profile ---        
+        # Branch A: Advanced Modes (Academic/Coder/Analyst) -> Use AgentExecutor (Tools)
+        if selected_mode in ["academic", "coder", "analyst"]:
+            print("⚙️ Using Advanced Tool Runner")
+            
+            # Select tools (Web Search + Code Sandbox)
+            active_tools = [self.web_search_tool, self.code_tool]
+            
+            runner = self.llm_factory.get_agent_runner(final_config, active_tools)
+            
+            result = await runner.ainvoke({
+                "context": context_text,
+                "question": query,
+                "input": query # AgentExecutor might use 'input' internally, so providing both is safer
+            })
+            return result["output"]
+
+        # Branch B: Standard Modes (Productivity/Casual) -> Use Simple Chain
+        else:
+            print("⚡ Using Standard Chain")
+            chain = self.llm_factory.get_agent_chain(final_config)
+            
+            response = await chain.ainvoke({
+                "context": context_text,
+                "question": query
+            })
+            return response
     

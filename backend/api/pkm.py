@@ -2,12 +2,14 @@ import os
 import shutil
 import aiofiles
 from sqlalchemy import select
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader, UnstructuredEPubLoader
 
 from backend.auth.users import current_active_user
+from backend.services.user_service import get_user_agent_config
 from backend.db.models import User, UserProfile
-from backend.schemas import SearchRequest
+from backend.schemas import ChatRequest
 from backend.agents.service import AIAgent
 
 router = APIRouter()
@@ -52,30 +54,45 @@ async def ingest_document(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if os.path.exists(file_path): os.remove(file_path)
-
+    
 @router.post("/chat")
 async def chat_with_pkm(
-    req: SearchRequest,
+    req: ChatRequest,
     user: User = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session) # Inject DB
 ):
+    """
+    Main Chat Endpoint.
+    Handles RAG, Web Search Fallback, and Multi-Model Routing.
+    """
     # 1. Fetch User Profile for Preferences
-    result = await db.execute(select(UserProfile).where(UserProfile.user_id == user.id))
-    profile = result.scalars().first()
+    user_prefs = await get_user_agent_config(db, user.id)
     
-    # Default to empty dict if no profile
-    user_prefs = profile.agent_preferences if profile else {}
-    
-    # 2. Determine Mode (Default to "productivity" if not set)
-    selected_mode = user_prefs.get("mode", "productivity")
+    # 2. Merge Request Overrides
+    # Allow user to switch to a different LLM model for this one message
+    overrides = user_prefs.copy()
+    if req.model_provider:
+        overrides["provider"] = req.model_provider
+    if req.model_name:
+        overrides["model"] = req.model_name
+
+    # 3. Determine Mode
+    # Priority: Request Mode > User Default Mode > "auto"
+    selected_mode = req.mode 
+    if selected_mode == "auto" and overrides.get("default_mode"):
+        selected_mode = overrides.get("default_mode")
     
     # 3. Call Agent with BOTH user_id and the specific preferences
-    # Pass the full user_prefs dict so the Agent can apply overrides (tone/refinement)
-    answer = agent.query_with_context(
-        query=req.query, 
-        user_id=user.id, 
-        mode=selected_mode,
-        overrides=user_prefs
-    )
-    
-    return {"answer": answer}
+    # The agent will use 'selected_mode' to pick the personality (System Prompt), and overrides to pick the Brain (Provider/Model).
+    try:
+        answer = await agent.query_with_context(
+            query=req.query, 
+            user_id=user.id, 
+            mode=selected_mode,
+            overrides=overrides,
+            db=db
+        )
+        return {"answer": answer, "mode_used": selected_mode}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent Error: {str(e)}")
