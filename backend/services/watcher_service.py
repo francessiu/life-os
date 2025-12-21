@@ -7,6 +7,7 @@ from backend.db.session import async_session_maker
 from backend.db.models import KnowledgeSource, SourceScope
 from backend.services.crawler_service import crawler
 from backend.pkm.rag_service import rag_service
+from backend.services.ingestion_service import ingestion_service
 
 async def run_watcher_cycle():
     """Cron Task: Checks for sources that need updating."""
@@ -39,22 +40,27 @@ async def run_watcher_cycle():
                 data = await crawler.crawl_url(source.url)
                 
                 if data and data['content']:
-                    # 3. Ingest into RAG
+                    # 3. Ingestion
                     # If Scope is GLOBAL, ingest with a special 'global' user_id (e.g. 0), or handle permissions in the RAG search logic.
                     target_user_id = source.user_id if source.scope == SourceScope.PRIVATE else 0
                     
-                    await asyncio.to_thread(
-                        rag_service.ingest_text,
-                        text=data['content'],
-                        source=f"Watcher: {source.url}",
-                        user_id=target_user_id,
-                        metadata={"scope": source.scope.value, "title": data['title']}
+                    note_obj = await ingestion_service.process_and_ingest(
+                        raw_text=data['content'],
+                        metadata={
+                            "source_url": source.url,
+                            # We pass the scraped title as a fallback, 
+                            # but the AI will generate a better one.
+                            "title": data.get('title'), 
+                            "user_id": target_user_id,
+                            "scope": source.scope.value
+                        },
+                        store_raw=True 
                     )
                     
-                    # 4. Update Success State
+                    # 4. Update Source Status
                     source.last_crawled_at = datetime.utcnow()
+                    source.title = note_obj.title # Update DB with the smart AI title
                     source.error_count = 0
-                    source.title = data['title']
                     
                 else:
                     source.error_count += 1

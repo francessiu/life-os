@@ -1,67 +1,78 @@
 # LifeOS: The Personal PKM and AI Agent
 
-LifeOS is a application designed to merge Personal Knowledge Management (PKM) with goal-oriented gamification, supported by a personalised AI agent. The goal is to shift the user's focus from mere knowledge, task management to more strategic behavioral plan.
+LifeOS is a application designed to merge Personal Knowledge Management (PKM) with **goal-oriented gamification** and **autonomous research**. It acts as a centralized digital layer that integrates into your life—serving as a library, a proactive researcher, and a personalised productivity coach.
 
-**Status**: *In Early Development*
+**Status**: *Active Development*
+
+## Repository Structure
+
+The project follows a decoupled, service-oriented architecture, splitting the "Brain" (Python Backend) from the "Body" (Multi-platform Frontends).
 
 ```text
 life-os/
-├── backend/                       # Shared logic (Python)
-│   ├── app/                       # FastAPI application entry point
-│   ├── core/                      # Main business logic
-│   ├── db/                        # Database connections, models (Postgres/VectorDB)
-│   └── agents/                    # LLM orchestration, RAG pipeline, prompt templates
-├── frontend/                      # UI code
-│   ├── apple-native/              # MacOS and iOS specific (SwiftUI)
-│   │   ├── iOS/                   # iOS (Screen Time API, Widgets)
-│   │   └── macOS/                 # macOS (Floating Window, native blocking logic)
-│   ├── core-flutter/              # Shared Flutter codebase
-│   │   ├── lib/                   # Flutter source code
-│   │   └── test/                  # Unit and Widget tests
-│   └── web-dashboard/             # Separate web dashboard (React/Next.js)
-│       ├── public/
-│       └── src/
-├── docs/
-│   ├── architecture/              # Diagrams (UML, Data flow, API interactions)
-│   └── specs/                     # Feature specifications (e.g., Token Economy Logic)
-├── assets/
-├── tests/                         # End-to-end (E2E) tests
-└── README.md                      # Project overview 
+├── backend/                       # THE BRAIN (Python/FastAPI)
+│   ├── app/                       # Application entry point & middleware
+│   ├── api/                       # REST API Routes (Auth, Chat, Watcher)
+│   ├── core/                      # Configuration, Security, & Environment
+│   ├── db/                        # Database (Postgres & Weaviate Models)
+│   ├── agents/                    # AI Logic (Orchestrator, Research Agent, Tools)
+│   ├── pkm/                       # Knowledge Engine (RAG, Connectors, Ingestion)
+│   └── services/                  # Background Services (Crawler, Watcher, Sandbox)
+│
+├── frontend/                      # THE BODY (UI Layer)
+│   ├── apple-native/              # Deep OS Integration (Swift)
+│   │   ├── iOS/                   # Screen Time Shield, Widgets
+│   │   └── macOS/                 # Floating Butler, File Watcher
+│   ├── web-dashboard/             # Main Control Center (React/Next.js)
+│   │   ├── src/components/        # Chat Interface, Source Manager
+│   │   └── src/lib/               # API Clients
+│   └── browser-extension/         # Chrome/Edge Extension (Site Blocking & Overlay)
+│
+├── docs/                          # Architecture Diagrams & Specifications
+└── tests/                         # End-to-end (E2E) & Integration tests
 ```
 
 # Project Objectives 
 
-The objective of LifeOS is to create a centralised digital layer that integrates into the user's life, acting as a library, a personalised coach for productivity.
+LifeOS shifts focus from passive knowledge storage to **active behavioral change** and **autonomous intelligence**.
 
-* **Digital Integration**: Unify knowledge and workflow across all major platforms (Web, MacOS, iOS, Linux, Android).
+* **Unified Intelligence**: Connects dispersed data (Cloud Drives, Web Bookmarks, Local Files) into a single, queryable Vector Database.
 
-* **Personalised Intelligence**: Prioritise user-specific data (PKM) over generalised pre-trained knowledge.
+* **Proactive Research**: Moves beyond simple Q&A. The agent plans research, crawls the web, and builds its own knowledge base in the background.
 
-* **Behavioural Nudging**: Implement a unique token economy and a Digital Butler or Pet character to encourage focus and prevent distraction.
+* **Behavioural Nudging**: Combines a digital "Butler" character with a token economy to gamify focus and reduce distraction.
 
 ## Core Features
 
-| Feature Component | Functionality | Key Technology |
+| Feature Component | Functionality | Description |
 | :--- | :--- | :--- |
-| **🧠 PKM Database & RAG** | Connects to Google Drive, OneDrive, and iCloud. Converts documents into a searchable Vector Database for contextual Q&A with LLMs. | Python/FastAPI, Vector Database (Weaviate/Pinecone), Cloud Storage APIs |
-| **🤖 AI Agent** | Personalised LLM that uses RAG first, then web search as a fallback. Summarises information from multiple models (e.g., Gemini, ChatGPT, Claude). | LangChain/LlamaIndex, OpenAI, Anthropic (Claude 3.5) |
-| **🎮 Task Gamification** | AI analyses goals, breaks them into executable steps, and suggests measurable metrics. Implements a **token economy** for skipping tasks. | Python Agents, PostgreSQL (Token/Habit Tracking), SwiftUI/Kotlin (Platform Channels) |
-| **🖥️ Digital Butler or Pet** | A character that "lives" on the user's screen (floating window on desktop, overlay on Android). Remind user of tasks or interrupts media scrolling during focus sessions. | SwiftUI (MacOS), Flutter/Kotlin (Android), Screen Time API (iOS) |
+| **🧠 Advanced PKM & RAG Engine** | Multi-Source Ingestion | Automatically syncs with Google Drive, OneDrive, and local iCloud folders. |
+| | Hybrid Search | Uses Weaviate to combine Vector Search (Semantic) with Keyword Search (BM25) for high-precision retrieval. |
+| | Atomic Notes | AI automatically summarises raw documents into structured "Atomic Notes" (Essence + Core Ideas) while preserving raw text chunks for citation. |
+| **🤖 Autonomous AI Agent** | Orchestrator Pattern | A Router LLM intelligently directs queries to specialized agents. Personalised LLM uses RAG first, then web search as a fallback. | 
+| | Deep Research Mode | Mimics "OpenAI Deep Research." The agent generates a search plan, executes parallel queries, scrapes web content, and synthesizes a comprehensive report. |
+| | Sandboxed Execution | Capable of running Python code securely in Docker containers for data analysis and math. |
+| **🎮 "The Butler" & Gamification** | Digital Presence | AI analyses goals, breaks them into executable steps, and suggests measurable metrics. A floating character overlay on macOS/Windows/Web that reacts to your productivity state. |
+| | Focus Shield | Native integration with iOS Screen Time API and Browser Extensions to block distracting sites/apps. |
+| | Token Economy | "Doom scrolling" or skipping task costs tokens. |
+| **🖥️ The "Shared Knowledge" Engine** | Background Watcher | A scheduler that monitors user-selected websites and domains, re-crawling them automatically when content updates. |
+| | Global vs. Private Scope | Distinguishes between knowledge private to the user and "Global" knowledge sources shared across the LifeOS ecosystem.
 
 ## High-Level Architecture
 
-The LifeOS application follows a **Decoupled Service Architecture**:
+The system relies on a Python Backend handling heavy logic, communicating with lightweight Native Frontends.
 
-#### 1. Frontend Layer
-* **Web Dashboard (React/Next.js):** Primary interface for deep PKM browsing and goal setting.
-* **Apple Native (SwiftUI/Swift):** Provides native performance and is required for accessing restrictive operating system APIs (e.g., MacOS Floating Window, iOS Screen Time/DeviceActivity).
-* **Multi-Platform Mobile/Desktop (Flutter):** Serves as the base UI for Android, Linux, and shares logic with the Web and Apple platforms.
+### Backend Tech Stack 
 
-#### 2. Backend Layer (Python/FastAPI)
-The backend is the brain of the operation, designed as a set of stateless microservices orchestrated by FastAPI.
+ - Framework: FastAPI (Async Python)
+ - Database (Relational): PostgreSQL (User Data, Auth, Gamification State)
+ - Database (Vector): Weaviate (Hybrid Search, Multi-Tenancy)
+ - AI Orchestration: LangChain (LCEL), Pydantic, OpenAI/Anthropic/Google APIs
+ - Crawling: Firecrawl (Markdown Extraction)
+ - Task Queue: APScheduler & FastAPI BackgroundTasks
 
-* **API Gateway:** Handles authentication, routing, and ensures security (OAuth2).
-* **RAG Service:** Manages indexing, embedding generation, and vector retrieval.
-* **Gamification Service:** Contains the token logic, habit trackers, and goal decomposition algorithms.
+### Frontend Tech Stack 
 
-Communication between the Frontend and Backend is exclusively handled via **RESTful APIs** and **WebSockets** for real-time chat and progress updates.
+ - Web: React, Next.js, TailwindCSS
+ - macOS/iOS: Swift (SwiftUI, FamilyControls, DeviceActivity)
+ - Browser: Manifest V3 (Chrome/Edge)

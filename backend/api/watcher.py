@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from backend.auth.users import current_active_user
 from backend.services.watcher_service import run_watcher_cycle
 from backend.services.crawler_service import crawler
 from backend.pkm.rag_service import rag_service
+from backend.services.atomic_service import atomic_service
 
 router = APIRouter()
 
@@ -22,8 +24,12 @@ async def crawl_and_ingest_source(source_id: int):
     """
     Self-contained task that runs in the background.
     Opens its own DB session to avoid 'Session Closed' errors.
+    Background Task: 
+    1. Crawl URL
+    2. Generate Atomic Note (AI Analysis)
+    3. Ingest Note + Raw Content into Vector DB
     """
-    print(f"🚀 [Background] Starting immediate crawl for Source ID {source_id}")
+    print(f"🚀 [Background] Processing Source ID {source_id}")
     
     from backend.db.session import async_session_maker
     async with async_session_maker() as db:
@@ -32,7 +38,7 @@ async def crawl_and_ingest_source(source_id: int):
         source = result.scalars().first()
         
         if not source:
-            print(f"❌ Source {source_id} not found during background task.")
+            print(f"❌ Source {source_id} not found.")
             return
 
         try:
@@ -42,27 +48,40 @@ async def crawl_and_ingest_source(source_id: int):
             data = await crawler.crawl_url(source.url)
             
             if data and data.get('content'):
-                print(f"   ✅ Content fetched. Ingesting...")
+                raw_markdown = data['content']
+                print(f" ✅ Content fetched ({len(raw_markdown)} chars). Analyzing...")
+
+                # 3. Generate Atomic Note (AI Analysis)
+                # This step uses the LLM to structure the messy web page
+                note_obj = await atomic_service.generate_note(raw_markdown, source.url)
+                
+                # Convert to your specific Markdown format string
+                formatted_note_content = atomic_service.format_as_markdown(note_obj)
+                
+                print(f" 🧠 Atomic Note Generated: '{note_obj.title}'")
                 
                 # 3. Ingest to RAG
                 target_user_id = source.user_id if source.scope == SourceScope.PRIVATE else 0
                 
-                # Note: Ingest is CPU bound (embedding), run in thread
-                import asyncio
+                # Run ingestion in thread (blocking network I/O to Weaviate)
                 await asyncio.to_thread(
-                    rag_service.ingest_text,
-                    text=data['content'],
-                    source=f"Web: {source.url}",
-                    user_id=target_user_id,
+                    rag_service.ingest_document,
+                    text=raw_markdown,             # The Raw Chunks
+                    summary=formatted_note_content, # The Atomic Note
                     metadata={
-                        "title": data.get('title'),
-                        "scope": source.scope.value
-                    }
+                        "source_url": source.url,
+                        "title": note_obj.title,
+                        "user_id": target_user_id,
+                        "scope": source.scope.value,
+                        # Store extracted tags for filtering later if needed
+                        "keywords": note_obj.keywords 
+                    },
+                    store_raw=True # Always store raw for web sources so we can cite details
                 )
                 
                 # 4. Update Source Status
                 source.last_crawled_at = datetime.utcnow()
-                source.title = data.get('title', source.title)
+                source.title = note_obj.title # Update DB title to match the AI generated one
                 source.error_count = 0
                 
             else:
